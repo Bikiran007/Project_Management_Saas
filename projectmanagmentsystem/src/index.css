@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { @apply bg-slate-50 text-slate-900 antialiased; font-family: Inter, system-ui, sans-serif; }
+
+@keyframes slideIn { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes flash { 0% { box-shadow: 0 0 0 3px rgb(59 108 246 / .5) } 100% { box-shadow: 0 0 0 0 rgb(59 108 246 / 0) } }
+.flash { animation: flash 1.2s ease-out; }
+
+.scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
