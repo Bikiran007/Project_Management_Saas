@@ -87,6 +87,9 @@ export interface Task {
   order: number;
   parentTaskId: string | null;
   dueDate: string | null;
+  followUpTo?: string;
+  deadlinePenalty?: { dueDate: string; assigneeId: string | null };
+  deadlineOutcome?: 'early' | 'on-time' | 'late';
   estimateHours: number;
   completedAt: string | null;
   attachments: Attachment[];
@@ -145,7 +148,7 @@ export interface Notification {
   id: string;
   workspaceId: string;
   userId: string;
-  type: 'mention' | 'assigned' | 'comment' | 'role';
+  type: 'mention' | 'assigned' | 'comment' | 'role' | 'deadline';
   message: string;
   taskId: string | null;
   read: boolean;

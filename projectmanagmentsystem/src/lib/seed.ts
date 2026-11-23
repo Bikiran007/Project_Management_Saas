@@ -256,10 +256,12 @@ export async function buildSeed(): Promise<DB> {
   return db;
 }
 
-/** Seed on first run. Returns true if seeding happened. */
+/** Load demo data on request in a fresh browser. */
 export async function ensureSeeded(): Promise<boolean> {
   if (hasStoredDb() && getDb().users.length) return false;
-  replaceDb(await buildSeed());
+  const demo = await buildSeed();
+  if (getDb().users.length) return false;
+  replaceDb(demo);
   return true;
 }
 

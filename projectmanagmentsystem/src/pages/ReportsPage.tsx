@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useLive, useSession } from '@/store/app';
 import { dayKey, lookupUser, projectsApi, reportsApi } from '@/lib/api';
@@ -12,9 +12,12 @@ export default function ReportsPage() {
   const openTask = useOpenTask();
   const [range, setRange] = useState('7');
   const [projectId, setProjectId] = useState('');
-  const r = useMemo(() => ({ from: dayKey(new Date(Date.now() - (Number(range) - 1) * 864e5)), to: dayKey(new Date()) }), [range]);
+  const today = new Date();
+  const from = new Date(today);
+  from.setDate(today.getDate() - Number(range) + 1);
+  const r = { from: dayKey(from), to: dayKey(today) };
   const projects = useLive(() => projectsApi.list(), [s.ctx.workspaceId], []);
-  const workload = useLive(() => reportsApi.workload(r), [r.from, r.to, s.ctx.workspaceId]);
+  const workload = useLive(() => reportsApi.workload(r, projectId || undefined), [r.from, r.to, projectId, s.ctx.workspaceId]);
   const velocity = useLive(() => reportsApi.velocity(projectId || undefined), [projectId], []);
   const status = useLive(() => reportsApi.statusBreakdown(projectId || undefined), [projectId], []);
   const overdue = useLive(() => reportsApi.overdue().filter((t) => !projectId || t.projectId === projectId), [projectId], []);
@@ -53,6 +56,7 @@ export default function ReportsPage() {
                     <th className="py-2 text-right font-medium">Overdue</th>
                     <th className="py-2 text-left font-medium pl-4">Open estimate</th>
                     <th className="py-2 text-right font-medium">Logged</th>
+                    <th className="py-2 text-right font-medium">Penalty points</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -68,6 +72,7 @@ export default function ReportsPage() {
                         </div>
                       </td>
                       <td className="py-2 text-right font-medium">{w.logged}h</td>
+                      <td className="py-2 text-right">{w.penaltyPoints}</td>
                     </tr>
                   ))}
                 </tbody>
