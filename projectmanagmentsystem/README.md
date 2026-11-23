@@ -9,11 +9,13 @@ A Jira/Asana-style project management SaaS. Organisations get isolated **workspa
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 15 unit tests: tenant isolation, RBAC, invites, auth, sprints, reports
+npm test           # Tenant isolation, RBAC, invites, auth, sprints, reports, deadlines
 npm run build      # typecheck + production build
 ```
 
 ## Demo accounts
+
+On a fresh browser, expand **Demo accounts** on the login screen and choose an account to load the sample workspace. Use **Create your organisation** to start with an empty workspace.
 
 | Email | Password | Role | Organisation |
 |---|---|---|---|
@@ -25,7 +27,7 @@ npm run build      # typecheck + production build
 | admin@globex.com | Admin@123 | Owner | Globex Inc (a separate tenant) |
 | maya@globex.com | Employee@123 | Member | Globex Inc |
 
-To restore the demo data, use **Settings → Reset demo data**.
+**Settings → Reset demo data** replaces the data stored in this browser with the sample workspaces.
 
 ## Authentication rules
 
@@ -46,6 +48,13 @@ To restore the demo data, use **Settings → Reset demo data**.
 - **Audit log** (admins), filterable and exportable to CSV.
 - **Tenant isolation self-test** (Settings): simulates cross-tenant attacks live and shows that each one is blocked.
 
+## Deadlines and reporting
+
+- Tasks and subtasks require a deadline. Work completed on the due date is on time.
+- For an assigned task finished before its due date, owners and admins receive a notification. Open the task and select **Assign follow-up task** to give the same person a linked task.
+- A missed deadline records one penalty point per task against the assignee at the time of the miss. See the task details and the **Penalty points** column in Reports. Deadline checks run when the workspace opens, regains focus, and once a minute while open.
+- Reports read saved tasks, sprints and time logs. The project filter scopes workload, status, velocity and overdue tasks.
+
 ## Multi-tenancy design (interview notes)
 
 - `src/lib/tenant.ts` is the **central tenant guard**: the only path to tenant-owned collections. It is bound to the `workspaceId` from the **session**, never from request input. It filters every read, stamps `workspaceId` on inserts (overwriting any value the caller passed), strips it from updates, and returns **404** for other tenants' ids so their existence isn't confirmed. This is the frontend version of a Mongoose plugin that injects `{ workspaceId }` into every query.
@@ -55,7 +64,7 @@ To restore the demo data, use **Settings → Reset demo data**.
 
 ## Testing real-time
 
-Open the app in two tabs (or a normal window plus a private one) and log in as two different users from the same organisation, e.g. `admin@acme.com` and `rahul@acme.com`. Drag a card in one tab and watch it move in the other.
+Open the app in two tabs in the same browser profile and log in as two different users from the same organisation, e.g. `admin@acme.com` and `rahul@acme.com`. Drag a card in one tab and watch it move in the other.
 
 ## Tech stack
 
