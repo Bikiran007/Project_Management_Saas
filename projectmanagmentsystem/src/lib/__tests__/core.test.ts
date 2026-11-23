@@ -207,6 +207,24 @@ describe('task deadlines', () => {
     expect(tasksApi.create({ ...input, dueDate: '2099-02-28' }).dueDate).toBe('2099-02-28');
   });
 
+  it('treats completion on the deadline as on time', async () => {
+    await login('rahul@acme.com', 'Employee@123');
+    const task = tasksApi.create({
+      projectId: projectsApi.list()[0].id,
+      assigneeId: resolveCtx()!.userId,
+      title: 'Due today',
+      dueDate: dayKey(new Date()),
+    });
+    tasksApi.move(task.id, 'done');
+    tasksApi.checkDeadlines();
+    expect(task.deadlineOutcome).toBe('on-time');
+    expect(task.deadlinePenalty).toBeUndefined();
+
+    logout();
+    await login('admin@acme.com', 'Admin@123');
+    expect(notificationsApi.list().some((n) => n.taskId === task.id && n.type === 'deadline')).toBe(false);
+  });
+
   it('records one penalty against the original assignee and reflects it in project reports', async () => {
     await login('admin@acme.com', 'Admin@123');
     const [project, other] = projectsApi.list();
