@@ -188,6 +188,25 @@ describe('tasks, sprints and reports', () => {
     expect(wl.rows.length).toBe(5);
   });
 
+  it('includes only in-range time logs from the selected project in workload reports', async () => {
+    await login('admin@acme.com', 'Admin@123');
+    const [selected, other] = projectsApi.list();
+    const admin = resolveCtx()!.userId;
+    const date = dayKey(new Date());
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    for (const [projectId, hours, logDate] of [
+      [selected.id, 2, date],
+      [selected.id, 4, dayKey(yesterday)],
+      [other.id, 3, date],
+    ] as const) {
+      const task = tasksApi.create({ projectId, title: 'Workload test task', dueDate: date });
+      timeApi.add({ taskId: task.id, hours, date: logDate, note: '' });
+    }
+    const workload = reportsApi.workload({ from: date, to: date }, selected.id);
+    expect(workload.rows.find((row) => row.userId === admin)?.logged).toBe(2);
+  });
+
   it('time logs validate hours and future dates', async () => {
     await login('rahul@acme.com', 'Employee@123');
     const t = tasksApi.mine()[0];
