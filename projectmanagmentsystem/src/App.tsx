@@ -5,6 +5,8 @@ import { ConfirmHost, Toaster } from './components/ui';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import InvitePage from './pages/InvitePage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import AppLayout from './components/AppLayout';
 import DashboardPage from './pages/DashboardPage';
 import MyTasksPage from './pages/MyTasksPage';
@@ -39,6 +41,8 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
         <Route path="/signup" element={<PublicOnly><SignupPage /></PublicOnly>} />
+        <Route path="/forgot-password" element={<PublicOnly><ForgotPasswordPage /></PublicOnly>} />
+        <Route path="/reset-password/:token" element={<PublicOnly><ResetPasswordPage /></PublicOnly>} />
         <Route path="/invite/:token" element={<InvitePage />} />
         <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
           <Route path="/dashboard" element={<DashboardPage />} />

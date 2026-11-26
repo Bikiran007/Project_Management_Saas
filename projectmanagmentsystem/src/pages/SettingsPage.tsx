@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, RotateCcw, ShieldCheck, XCircle } from 'lucide-react';
 import { useApp, useSession, run } from '@/store/app';
 import { profileApi, workspaceApi } from '@/lib/api';
-import { changePassword, logout } from '@/lib/auth';
+import { changePassword, logout, resetDemoData } from '@/lib/auth';
 import { can } from '@/lib/permissions';
-import { resetDemoData } from '@/lib/seed';
 import { runIsolationSelfTest, type CheckResult } from '@/lib/selftest';
 import { Avatar, Button, Card, Field, Input, PageHeader, RoleBadge } from '@/components/ui';
 
@@ -63,7 +62,7 @@ export default function SettingsPage() {
           <p className="text-sm text-slate-600">
             Simulates an attacker in <b>{s.workspace.name}</b> who knows the IDs of another organisation's tasks and projects. Every request goes through the central tenant guard, which scopes it to the workspace in your session, so all of them should be blocked.
           </p>
-          <Button variant="secondary" onClick={() => setResults(runIsolationSelfTest())} data-testid="run-selftest">Run isolation checks</Button>
+          <Button variant="secondary" onClick={async () => setResults(await runIsolationSelfTest())} data-testid="run-selftest">Run isolation checks</Button>
           {results && (
             <div className="rounded-md border border-slate-200">
               <div className={`px-3 py-2 text-sm font-medium ${results.every((r) => r.pass) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
@@ -120,24 +119,26 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      <Card title="Demo data">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <p className="text-sm text-slate-600">All data is stored in this browser. Reset to restore the original demo organisations and accounts.</p>
-          <Button
-            variant="secondary"
-            icon={<RotateCcw className="h-4 w-4" />}
-            onClick={async () => {
-              if (await confirm({ title: 'Reset demo data?', message: 'Everything created in this browser will be erased and the demo data restored. You will be logged out.', danger: true, confirmLabel: 'Reset' })) {
-                await resetDemoData();
-                logout();
-                nav('/login');
-              }
-            }}
-          >
-            Reset demo data
-          </Button>
-        </div>
-      </Card>
+      {import.meta.env.VITE_DEMO_MODE === 'true' && (
+        <Card title="Demo data">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <p className="text-sm text-slate-600">All data is stored in this browser. Reset to restore the original demo organisations and accounts.</p>
+            <Button
+              variant="secondary"
+              icon={<RotateCcw className="h-4 w-4" />}
+              onClick={async () => {
+                if (await confirm({ title: 'Reset demo data?', message: 'Everything created in this browser will be erased and the demo data restored. You will be logged out.', danger: true, confirmLabel: 'Reset' })) {
+                  await resetDemoData();
+                  logout();
+                  nav('/login');
+                }
+              }}
+            >
+              Reset demo data
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

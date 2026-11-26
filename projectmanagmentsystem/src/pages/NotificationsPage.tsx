@@ -1,12 +1,12 @@
 import clsx from 'clsx';
-import { AtSign, Bell, CalendarClock, CheckCheck, MessageSquare, Shield, UserCheck } from 'lucide-react';
+import { AtSign, Bell, CheckCheck, Clock, MessageSquare, Shield, UserCheck } from 'lucide-react';
 import { useLive, useSession } from '@/store/app';
 import { notificationsApi } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { Button, Card, EmptyState, PageHeader } from '@/components/ui';
 import { useOpenTask } from '@/components/hooks';
 
-const ICON = { mention: AtSign, assigned: UserCheck, comment: MessageSquare, role: Shield, deadline: CalendarClock };
+const ICON = { mention: AtSign, assigned: UserCheck, comment: MessageSquare, role: Shield, overdue: Clock };
 
 export default function NotificationsPage() {
   const s = useSession();

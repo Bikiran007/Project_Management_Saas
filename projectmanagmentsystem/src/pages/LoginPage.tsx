@@ -1,11 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, LogIn, ShieldCheck, Users } from 'lucide-react';
 import AuthShell from '@/components/AuthShell';
 import { Button, Field, Input, RoleBadge } from '@/components/ui';
-import { login, EMAIL_RE } from '@/lib/auth';
-import { getDb } from '@/lib/db';
-import { DEMO_ACCOUNTS, ensureSeeded } from '@/lib/seed';
+import { login, EMAIL_RE, fetchAppConfig, type DemoAccount } from '@/lib/auth';
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -17,9 +15,17 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
 
-  const users = getDb().users;
-  const demoAccounts = users.length ? DEMO_ACCOUNTS.filter((account) => users.some((user) => user.email === account.email)) : DEMO_ACCOUNTS;
+  useEffect(() => {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      fetchAppConfig()
+        .then((cfg) => {
+          if (cfg.demoAccounts) setDemoAccounts(cfg.demoAccounts);
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   const emailErr = touched && !EMAIL_RE.test(email.trim()) ? 'Enter a valid email address' : '';
   const pwErr = touched && !password ? 'Password is required' : '';
@@ -70,6 +76,9 @@ export default function LoginPage() {
             </button>
           </div>
         </Field>
+        <div className="flex justify-end">
+          <Link to="/forgot-password" className="text-xs font-medium text-brand-600 hover:underline">Forgot password?</Link>
+        </div>
         <Button type="submit" className="w-full" loading={loading} icon={<LogIn className="h-4 w-4" />}>
           Log in
         </Button>
@@ -88,38 +97,31 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {demoAccounts.length > 0 && <details className="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm">
-        <summary className="cursor-pointer font-medium text-slate-700">Demo accounts (click one to fill)</summary>
-        <div className="mt-2 divide-y divide-slate-200">
-          {demoAccounts.map((a) => (
-            <button
-              key={a.email}
-              type="button"
-              disabled={loading}
-              onClick={async () => {
-                setLoading(true);
-                setError('');
-                try {
-                  await ensureSeeded();
+      {import.meta.env.VITE_DEMO_MODE === 'true' && demoAccounts.length > 0 && (
+        <details className="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm" open>
+          <summary className="cursor-pointer font-medium text-slate-700">Demo accounts (click one to fill)</summary>
+          <div className="mt-2 divide-y divide-slate-200">
+            {demoAccounts.map((a) => (
+              <button
+                key={a.email}
+                type="button"
+                onClick={() => {
                   setEmail(a.email);
                   setPassword(a.password);
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Could not load demo accounts');
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="flex w-full items-center justify-between gap-2 py-1.5 text-left hover:text-brand-700"
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{a.name} <span className="font-normal text-slate-400">· {a.org}</span></span>
-                <span className="block truncate text-xs text-slate-500">{a.email} / {a.password}</span>
-              </span>
-              <RoleBadge role={a.role} />
-            </button>
-          ))}
-        </div>
-      </details>}
+                  setError('');
+                }}
+                className="flex w-full items-center justify-between gap-2 py-1.5 text-left hover:text-brand-700"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{a.name} <span className="font-normal text-slate-400">· {a.org}</span></span>
+                  <span className="block truncate text-xs text-slate-500">{a.email} / {a.password}</span>
+                </span>
+                <RoleBadge role={a.role} />
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
     </AuthShell>
   );
 }

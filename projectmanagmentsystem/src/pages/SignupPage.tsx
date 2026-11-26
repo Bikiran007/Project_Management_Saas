@@ -79,7 +79,7 @@ export default function SignupPage() {
           </Field>
         </div>
         <Field label="Organisation name" htmlFor="org" error={show('workspaceName')} hint={f.workspaceName.trim() ? `Workspace URL: taskforge.app/${slugify(f.workspaceName)}` : undefined}>
-          <Input id="org" value={f.workspaceName} onChange={set('workspaceName')} invalid={!!show('workspaceName')} placeholder="Acme Corp" />
+          <Input id="org" value={f.workspaceName} onChange={set('workspaceName')} invalid={!!show('workspaceName')} placeholder="Your organisation" />
         </Field>
         <Field label="Password" htmlFor="pw" error={show('password')}>
           <Input id="pw" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} invalid={!!show('password')} />

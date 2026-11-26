@@ -1,75 +1,176 @@
-# TaskForge: Multi-Tenant Project Management (Frontend)
+# TaskForge: Multi-Tenant Project Management SaaS
 
-A Jira/Asana-style project management SaaS. Organisations get isolated **workspaces**, invite employees with **roles**, and manage **projects, Kanban boards, sprints, backlog, tasks, subtasks, comments, time logs and reports**.
+A Jira/Asana-style project management SaaS built with **React 18 + Vite + TypeScript + Tailwind CSS** on the frontend and **Node.js + Express + TypeScript + MongoDB (Mongoose)** on the backend, with **Socket.io** real-time updates and **Nodemailer** email delivery.
 
-> **Evaluation 1: frontend only.** There is no server yet. A mock API layer (`src/lib/`) follows the same rules a real Express + MongoDB backend would: tenant-scoped queries, RBAC checks, hashed passwords and signed, single-use invite tokens. Data is saved in the browser's `localStorage`, and browser tabs stay in sync live through `BroadcastChannel` (standing in for Socket.io + Redis).
+Organisations get isolated **workspaces**, invite employees with **roles**, and manage **projects, Kanban boards, sprints, backlog, tasks, subtasks, comments, attachments, time logs, analytics reports, and audit trails**.
 
-## Run it
+---
 
+## Architecture & Features
+
+- **Multi-Tenant Architecture**: Strict tenant isolation enforced on the server. Every query is scoped by `workspaceId` extracted from the verified session JWT (never from client request inputs). Foreign tenant records return `404 Not Found` to prevent data existence disclosure.
+- **Role-Based Access Control (RBAC)**: Owner, Admin, Member, and Guest with strict per-resource permissions (e.g. only task reporters or admins can delete tasks; admins cannot demote owners).
+- **Authentication & Security**: Passwords hashed with `bcrypt`. JWT tokens in httpOnly cookies (and Bearer header). 5-failed-attempts account lockout enforced server-side for 60 seconds. Input validation with Zod, rate limiting, and Helmet security headers.
+- **Real-Time Collaboration**: Real WebSocket synchronization via **Socket.io** with workspace-scoped rooms and presence indicators.
+- **Email Delivery**: Asynchronous Nodemailer engine (SMTP / Resend / Mailgun) with responsive HTML and plain-text templates for:
+  - Secure member invitations (256-bit random token, SHA-256 hashed at rest, single-use, 7-day expiry)
+  - Welcome email after organisation sign-up
+  - Task assignments
+  - @mentions in task comments
+  - Member role updates
+  - Removal from workspace
+  - Password reset links (single-use, 1-hour expiry)
+- **Analytics & Reports**: Burndown charts, velocity charts, workload distribution, and overdue calculations aggregated directly from MongoDB collections.
+- **File Storage**: Local disk attachment storage (under `server/uploads/`) with file size (15MB) and MIME-type restrictions.
+- **Configurable Settings**: Workload overload threshold (30h default), daily timesheet threshold (8h default), velocity sprint limit (8 default), and date ranges.
+
+---
+
+## Getting Started Locally
+
+### 1. Prerequisites
+- **Node.js**: v18.0.0 or higher
+- **MongoDB**: A running local MongoDB instance (e.g., `mongodb://localhost:27017/taskforge`) or a MongoDB Atlas connection string. You can inspect data using **MongoDB Compass**.
+
+### 2. Installation
 ```bash
+# Clone the repository
+git clone <repo-url>
+cd projectmanagmentsystem
+
+# Install all dependencies
 npm install
-npm run dev        # http://localhost:5173
-npm test           # Tenant isolation, RBAC, invites, auth, sprints, reports, deadlines
-npm run build      # typecheck + production build
 ```
 
-## Demo accounts
+### 3. Environment Setup
+Copy the example environment file:
+```bash
+cp .env.example .env
+```
 
-On a fresh browser, expand **Demo accounts** on the login screen and choose an account to load the sample workspace. Use **Create your organisation** to start with an empty workspace.
+Edit `.env` to configure your settings:
+```env
+MONGODB_URI=mongodb://localhost:27017/taskforge
+PORT=5000
+NODE_ENV=development
+JWT_SECRET=your-secure-jwt-secret-key-at-least-32-chars
+CLIENT_URL=http://localhost:5173
+VITE_API_URL=http://localhost:5000
+VITE_DEMO_MODE=true
+```
 
+### 4. Seed Development Data (Optional)
+To populate the database with Acme Corp and Globex Inc demo workspaces, users, projects, and sprints:
+```bash
+npm run seed
+```
+
+**Demo accounts seeded:**
 | Email | Password | Role | Organisation |
 |---|---|---|---|
-| admin@acme.com | Admin@123 | Owner (admin) | Acme Corp |
-| priya@acme.com | Employee@123 | Admin | Acme Corp |
-| rahul@acme.com | Employee@123 | Member (employee) | Acme Corp |
-| neha@acme.com | Employee@123 | Member (employee) | Acme Corp |
-| guest@acme.com | Employee@123 | Guest (read-only) | Acme Corp |
-| admin@globex.com | Admin@123 | Owner | Globex Inc (a separate tenant) |
-| maya@globex.com | Employee@123 | Member | Globex Inc |
+| `admin@acme.com` | `Admin@123` | Owner (admin) | Acme Corp |
+| `priya@acme.com` | `Employee@123` | Admin | Acme Corp |
+| `rahul@acme.com` | `Employee@123` | Member (employee) | Acme Corp |
+| `neha@acme.com` | `Employee@123` | Member (employee) | Acme Corp |
+| `guest@acme.com` | `Employee@123` | Guest (read-only) | Acme Corp |
+| `admin@globex.com` | `Admin@123` | Owner | Globex Inc (separate tenant) |
+| `maya@globex.com` | `Employee@123` | Member | Globex Inc |
 
-**Settings → Reset demo data** replaces the data stored in this browser with the sample workspaces.
+### 5. Running the Application
 
-## Authentication rules
+Open two terminal windows:
 
-- **Login** works for everyone (admins and employees). Wrong credentials give a generic "Invalid email or password". Five failed attempts lock the account for 60s.
-- **Sign-up is for admins only.** It creates a *new organisation* plus an **owner** account. It refuses emails that already have an account, so an employee can't create their own account this way.
-- **Employees join by invitation.** An admin opens **Members → Invite member** and gets a link. The token is 256 random bits, and only its SHA-256 hash is stored. It is **single-use**, **expires in 7 days** and can be **revoked**.
-- Passwords are hashed with PBKDF2-SHA256 and a per-user salt (the browser stand-in for bcrypt).
+**Terminal 1 (Backend Server):**
+```bash
+npm run server
+# Server runs on http://localhost:5000
+```
 
-## Features
+**Terminal 2 (Frontend Client):**
+```bash
+npm run dev
+# Frontend runs on http://localhost:5173
+```
 
-- Workspaces with a switcher. One user can belong to several organisations.
-- Roles: **owner / admin / member / guest**, with a permission matrix plus per-resource rules (members may delete only tasks they reported; admins can't change the owner or other admins).
-- Projects with **Board** (drag and drop with dnd-kit), **List** (sort and filter), **Backlog & sprints** (create, start, complete, carry over), **Reports** and **Settings**.
-- Tasks: assignee, priority, labels, due date, estimate, subtasks, attachments, comments with **@mention autocomplete**, time log and full change history.
-- **Real-time:** board moves, comments and member joins appear live in other tabs, with "Live" toasts and an online-presence indicator.
-- **My Tasks** across projects, **Notifications** (mentions, assignments, role changes).
-- **Timesheets** (weekly grid with CSV export) and **Reports** (burndown, velocity, workload distribution, overdue).
-- **Audit log** (admins), filterable and exportable to CSV.
-- **Tenant isolation self-test** (Settings): simulates cross-tenant attacks live and shows that each one is blocked.
+Navigate to `http://localhost:5173` in your browser.
 
-## Deadlines and reporting
+---
 
-- Tasks and subtasks require a deadline. Work completed on the due date is on time.
-- For an assigned task finished before its due date, owners and admins receive a notification. Open the task and select **Assign follow-up task** to give the same person a linked task.
-- A missed deadline records one penalty point per task against the assignee at the time of the miss. See the task details and the **Penalty points** column in Reports. Deadline checks run when the workspace opens, regains focus, and once a minute while open.
-- Reports read saved tasks, sprints and time logs. The project filter scopes workload, status, velocity and overdue tasks.
+## Configuring Email (SMTP)
 
-## Multi-tenancy design (interview notes)
+To enable real email sending for member invitations and notifications, provide your SMTP credentials in `.env`:
 
-- `src/lib/tenant.ts` is the **central tenant guard**: the only path to tenant-owned collections. It is bound to the `workspaceId` from the **session**, never from request input. It filters every read, stamps `workspaceId` on inserts (overwriting any value the caller passed), strips it from updates, and returns **404** for other tenants' ids so their existence isn't confirmed. This is the frontend version of a Mongoose plugin that injects `{ workspaceId }` into every query.
-- The role is re-read from the membership on every call, so a demotion or removal applies immediately. Removed users are signed out live.
-- Drag-and-drop uses **fractional ordering** (`order = (prev + next) / 2`), so a move touches only one row and two users reordering at the same time don't overwrite each other's work.
-- Activities form an **append-only audit trail**: actor, entity, action, before/after values and a timestamp.
+```env
+SMTP_HOST=smtp.mailgun.org
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=postmaster@your-domain.com
+SMTP_PASS=your-smtp-password
+MAIL_FROM="TaskForge <no-reply@your-domain.com>"
+```
 
-## Testing real-time
+*(Note: If `SMTP_HOST` is left blank, TaskForge runs in development mode, logging all generated email content and invite URLs directly to the terminal).*
 
-Open the app in two tabs in the same browser profile and log in as two different users from the same organisation, e.g. `admin@acme.com` and `rahul@acme.com`. Drag a card in one tab and watch it move in the other.
+---
 
-## Tech stack
+## Running Tests
 
-React 18 + Vite + TypeScript, Tailwind CSS, Zustand, React Router, dnd-kit, Recharts, lucide-react, Vitest.
+Unit and integration tests run against the server API and MongoDB database:
+```bash
+npm test
+```
+The test suite validates:
+1. Authentication (login, invalid credentials, 5-attempt lockout, admin signup, weak password rejection)
+2. Tenant isolation (cross-tenant 404s for foreign tasks/projects, cross-tenant user assignment blocks)
+3. RBAC (member, guest, admin, and owner permission boundaries)
+4. Invitations & Mailer (secure tokens, mailer payload checks, acceptance, single-use invalidation)
+5. Reports and MongoDB aggregations
 
-## Deploy (Vercel)
+To typecheck the project:
+```bash
+npm run typecheck
+```
 
-`vercel.json` already rewrites all routes to `index.html`. Import the repo into Vercel with build command `npm run build` and output directory `dist`.
+To build for production:
+```bash
+npm run build
+```
+
+---
+
+## Production Deployment
+
+### 1. Database (MongoDB Atlas)
+1. Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/atlas).
+2. Create a database user and whitelist network access (`0.0.0.0/0` or your host's IP).
+3. Copy your connection string into `MONGODB_URI`:
+   `mongodb+srv://<user>:<password>@cluster.mongodb.net/taskforge?retryWrites=true&w=majority`
+
+### 2. Backend Server (Render / Railway / Fly.io)
+1. Deploy the repository as a Node.js web service.
+2. Build command: `npm install`
+3. Start command: `npm run server`
+4. Configure environment variables in your hosting provider:
+   - `MONGODB_URI`: Your MongoDB Atlas URI
+   - `PORT`: `5000` (or host provided `$PORT`)
+   - `NODE_ENV`: `production`
+   - `JWT_SECRET`: Random 64-character secret
+   - `CLIENT_URL`: `https://your-taskforge-app.vercel.app`
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`: Your SMTP provider credentials
+
+### 3. Frontend Client (Vercel)
+1. Import the repository into [Vercel](https://vercel.com).
+2. Framework Preset: **Vite**
+3. Build Command: `npm run build`
+4. Output Directory: `dist`
+5. Configure Environment Variables:
+   - `VITE_API_URL`: `https://your-api-service.onrender.com` (your backend URL)
+   - `VITE_DEMO_MODE`: `false` (hides demo accounts box and reset demo data button in production)
+6. Vercel automatically routes all client navigation through `vercel.json`.
+
+---
+
+## Demo Mode
+
+- Set `VITE_DEMO_MODE=true` in `.env` to display the "Demo accounts" quick-fill box on the Login page and the "Reset demo data" button in Settings.
+- Set `VITE_DEMO_MODE=false` in production so only the clean login and production UI is visible.

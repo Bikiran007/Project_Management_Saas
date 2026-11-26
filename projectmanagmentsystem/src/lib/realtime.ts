@@ -1,54 +1,63 @@
-import { subscribe } from './db';
+import { io, Socket } from 'socket.io-client';
 import { useApp } from '@/store/app';
-import { randomToken } from './crypto';
+import { getToken } from './auth';
+import { syncFromServer } from './api';
 
-/**
- * Wires the in-browser "socket" into the UI store:
- *  - every DB change (local or from another tab) bumps the store version → live re-render
- *  - remote events for the current workspace show a "live" toast
- *  - a presence heartbeat shows who is online right now
- */
+let socket: Socket | null = null;
+let pingInterval: any = null;
+
+const SOCKET_URL = import.meta.env.VITE_API_URL || window.location.origin;
+
 export function startRealtime() {
-  subscribe((e) => {
-    const st = useApp.getState();
-    st.bump();
+  const token = getToken();
+  if (!token) return;
+
+  if (socket) {
+    socket.disconnect();
+  }
+
+  socket = io(SOCKET_URL, {
+    auth: { token },
+    transports: ['websocket', 'polling'],
+    withCredentials: true,
+  });
+
+  socket.on('connect', () => {
+    // Socket connected
+  });
+
+  socket.on('live:event', (e: any) => {
     const session = useApp.getState().session;
-    if (e.remote && e.message && session && e.workspaceId === session.ctx.workspaceId && e.actorId !== session.ctx.userId) {
-      st.toast(e.message, 'live');
+    if (session && e.workspaceId === session.ctx.workspaceId) {
+      if (e.message && e.actorId !== session.ctx.userId) {
+        useApp.getState().toast(e.message, 'live');
+      }
+      syncFromServer().catch(() => {});
     }
   });
 
-  if (typeof BroadcastChannel === 'undefined') return;
-  const tabId = randomToken(6);
-  const ch = new BroadcastChannel('taskforge-presence');
-  const seen = new Map<string, { userId: string; workspaceId: string; at: number }>();
-
-  const beat = () => {
-    const s = useApp.getState().session;
-    if (s) {
-      const msg = { tabId, userId: s.ctx.userId, workspaceId: s.ctx.workspaceId, at: Date.now() };
-      seen.set(tabId, msg);
-      ch.postMessage(msg);
-    } else seen.delete(tabId);
-    recompute();
-  };
-
-  const recompute = () => {
-    const s = useApp.getState().session;
-    const now = Date.now();
-    for (const [k, v] of seen) if (now - v.at > 9000) seen.delete(k);
-    const ids = s ? [...new Set([...seen.values()].filter((v) => v.workspaceId === s.ctx.workspaceId).map((v) => v.userId))] : [];
-    const prev = useApp.getState().online;
-    if (ids.length !== prev.length || ids.some((x) => !prev.includes(x))) useApp.getState().setOnline(ids);
-  };
-
-  ch.onmessage = (m) => {
-    seen.set(m.data.tabId, m.data);
-    recompute();
-  };
-  beat();
-  setInterval(beat, 3000);
-  useApp.subscribe((s, p) => {
-    if (s.session?.ctx.workspaceId !== p.session?.ctx.workspaceId || s.session?.ctx.userId !== p.session?.ctx.userId) beat();
+  socket.on('presence', (userIds: string[]) => {
+    useApp.getState().setOnline(userIds);
   });
+
+  if (pingInterval) clearInterval(pingInterval);
+  pingInterval = setInterval(() => {
+    if (socket && socket.connected) {
+      socket.emit('presence:ping');
+    }
+  }, 10000);
+}
+
+export function switchRealtimeWorkspace(workspaceId: string) {
+  if (socket && socket.connected) {
+    socket.emit('workspace:switch', workspaceId);
+  }
+}
+
+export function stopRealtime() {
+  if (pingInterval) clearInterval(pingInterval);
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
 }

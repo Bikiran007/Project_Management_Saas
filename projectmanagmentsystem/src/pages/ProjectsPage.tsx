@@ -20,7 +20,7 @@ export function ProjectFormModal({ open, onClose }: { open: boolean; onClose: ()
   async function submit(e: FormEvent) {
     e.preventDefault();
     let id = '';
-    if (await run(() => (id = projectsApi.create(f).id), `Project ${f.name} created`)) {
+    if (await run(async () => { const p = await projectsApi.create(f); id = p.id; }, `Project ${f.name} created`)) {
       onClose();
       setF({ name: '', key: '', description: '', leadId: s.ctx.userId });
       setKeyTouched(false);

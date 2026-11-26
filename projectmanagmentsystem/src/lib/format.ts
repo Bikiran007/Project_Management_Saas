@@ -19,11 +19,6 @@ export function fmtDate(d: string | null | undefined, opts: Intl.DateTimeFormatO
   return date.toLocaleDateString(undefined, opts);
 }
 
-/** Difference between two YYYY-MM-DD dates, independent of time of day or DST. */
-export function calendarDaysBetween(from: string, to: string) {
-  return (Date.parse(to) - Date.parse(from)) / 86_400_000;
-}
-
 export function initials(name: string) {
   return name
     .split(/\s+/)

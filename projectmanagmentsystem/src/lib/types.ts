@@ -14,12 +14,20 @@ export interface User {
   createdAt: string;
 }
 
+export interface WorkspaceSettings {
+  overloadThresholdHours: number;
+  dailyHoursThreshold: number;
+  velocitySprintCount: number;
+  defaultDateRangeDays: number;
+}
+
 export interface Workspace {
   id: string;
   name: string;
   slug: string;
   ownerId: string;
   plan: 'free' | 'pro';
+  settings?: WorkspaceSettings;
   createdAt: string;
 }
 
@@ -87,9 +95,6 @@ export interface Task {
   order: number;
   parentTaskId: string | null;
   dueDate: string | null;
-  followUpTo?: string;
-  deadlinePenalty?: { dueDate: string; assigneeId: string | null };
-  deadlineOutcome?: 'early' | 'on-time' | 'late';
   estimateHours: number;
   completedAt: string | null;
   attachments: Attachment[];
@@ -148,7 +153,7 @@ export interface Notification {
   id: string;
   workspaceId: string;
   userId: string;
-  type: 'mention' | 'assigned' | 'comment' | 'role' | 'deadline';
+  type: 'mention' | 'assigned' | 'comment' | 'role' | 'overdue';
   message: string;
   taskId: string | null;
   read: boolean;

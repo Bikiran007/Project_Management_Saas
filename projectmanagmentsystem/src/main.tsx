@@ -5,17 +5,28 @@ import App from './App';
 import './index.css';
 import { startRealtime } from './lib/realtime';
 import { useApp } from './store/app';
-import { adoptTabSession } from './lib/auth';
+import { syncFromServer } from './lib/api';
+import { getToken } from './lib/auth';
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
-adoptTabSession();
-startRealtime();
-useApp.getState().bump();
-root.render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>,
-);
+const boot = async () => {
+  if (getToken()) {
+    try {
+      await syncFromServer();
+    } catch (e) {
+      console.warn('Initial sync failed', e);
+    }
+  }
+  startRealtime();
+  useApp.getState().bump();
+  root.render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </React.StrictMode>,
+  );
+};
+
+boot();

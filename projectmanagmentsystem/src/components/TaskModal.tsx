@@ -7,7 +7,6 @@ import {
   activityApi,
   commentsApi,
   dayKey,
-  finishedEarly,
   lookupUser,
   membersApi,
   MENTION_RE,
@@ -225,8 +224,6 @@ export default function TaskModal({ taskId, onClose }: { taskId: string; onClose
   const members = useLive(() => membersApi.users(), [], []);
   const project = useLive(() => (task ? projectsApi.get(task.projectId) : null), [task?.projectId], null);
   const sprints = useLive(() => (task ? sprintsApi.list(task.projectId).filter((x) => x.status !== 'completed') : []), [task?.projectId], []);
-  const followUp = useLive(() => tasksApi.followUp(taskId) ?? null, [taskId], null);
-  const original = useLive(() => task?.followUpTo ? tasksApi.get(task.followUpTo) : null, [task?.followUpTo], null);
   const subtasks = useLive(() => tasksApi.subtasks(taskId), [taskId], []);
   const parent = useLive(() => (task?.parentTaskId ? tasksApi.get(task.parentTaskId) : null), [task?.parentTaskId], null);
   const comments = useLive(() => commentsApi.list(taskId), [taskId], []);
@@ -236,7 +233,6 @@ export default function TaskModal({ taskId, onClose }: { taskId: string; onClose
   const [desc, setDesc] = useState('');
   const [editingDesc, setEditingDesc] = useState(false);
   const [newSub, setNewSub] = useState('');
-  const [subDeadline, setSubDeadline] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const confirm = useApp((x) => x.confirm);
   const toast = useApp((x) => x.toast);
@@ -375,23 +371,15 @@ export default function TaskModal({ taskId, onClose }: { taskId: string; onClose
                 ))}
                 {!readOnly && (
                   <form
-                    className="flex flex-wrap items-center gap-2 px-3 py-1.5"
+                    className="flex items-center gap-2 px-3 py-1.5"
                     onSubmit={async (e) => {
                       e.preventDefault();
-                      if (!newSub.trim() || !subDeadline) return;
-                      if (await run(() => tasksApi.create({
-                        projectId: task.projectId, parentTaskId: task.id, title: newSub,
-                        assigneeId: task.assigneeId, dueDate: subDeadline,
-                      }))) {
-                        setNewSub('');
-                        setSubDeadline('');
-                      }
+                      if (!newSub.trim()) return;
+                      if (await run(() => tasksApi.create({ projectId: task.projectId, parentTaskId: task.id, title: newSub }))) setNewSub('');
                     }}
                   >
                     <Plus className="h-4 w-4 text-slate-400" />
-                    <input value={newSub} onChange={(e) => setNewSub(e.target.value)} placeholder="Subtask title" required className="min-w-0 flex-1 bg-transparent py-1 text-sm focus:outline-none" />
-                    <Input type="date" required aria-label="Subtask deadline" value={subDeadline} onChange={(e) => setSubDeadline(e.target.value)} className="!w-auto" />
-                    <Button size="sm" type="submit">Add</Button>
+                    <input value={newSub} onChange={(e) => setNewSub(e.target.value)} placeholder="Add a subtask and press Enter" className="flex-1 bg-transparent py-1 text-sm focus:outline-none" />
                   </form>
                 )}
                 {readOnly && !subtasks.length && <p className="px-3 py-2 text-sm text-slate-400">No subtasks</p>}
@@ -545,19 +533,7 @@ export default function TaskModal({ taskId, onClose }: { taskId: string; onClose
           )}
           <Prop label={<span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> Due date</span>}>
             <Input type="date" value={task.dueDate ?? ''} disabled={readOnly} onChange={(e) => update({ dueDate: e.target.value || null })} className={isOverdue(task.dueDate, task.status) ? 'border-red-300 text-red-600' : ''} />
-            {task.deadlinePenalty && (
-              <p className="mt-1 text-xs font-medium text-red-600">
-                1 penalty point · Missed {fmtDate(task.deadlinePenalty.dueDate)} · {lookupUser(task.deadlinePenalty.assigneeId)?.name ?? 'Unassigned'}
-              </p>
-            )}
-            {finishedEarly(task) && <p className="mt-1 text-xs font-medium text-emerald-700">Finished early</p>}
-            {followUp && <div className="mt-2 text-xs">Follow-up <TaskLink task={followUp} /></div>}
-            {original && <div className="mt-2 text-xs">Follows <TaskLink task={original} /></div>}
-            {!followUp && project?.status === 'active' && task.assigneeId && finishedEarly(task) && isAdminRole(s.ctx.role) && (
-              <Button size="sm" variant="secondary" className="mt-2" onClick={() => useApp.getState().openCreateTask({
-                projectId: task.projectId, assigneeId: task.assigneeId!, followUpTo: task.id,
-              })}>Assign follow-up task</Button>
-            )}
+            {isOverdue(task.dueDate, task.status) && <p className="mt-1 text-xs font-medium text-red-600">Overdue</p>}
           </Prop>
           <Prop label="Estimate (hours)">
             <Input type="number" min="0" step="0.5" defaultValue={task.estimateHours} key={task.estimateHours} disabled={readOnly} onBlur={(e) => Number(e.target.value) !== task.estimateHours && update({ estimateHours: Number(e.target.value) })} />

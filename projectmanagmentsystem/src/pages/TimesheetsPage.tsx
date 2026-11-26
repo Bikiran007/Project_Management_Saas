@@ -17,6 +17,7 @@ function startOfWeek(d: Date) {
 export default function TimesheetsPage() {
   const s = useSession();
   const openTask = useOpenTask();
+  const dailyThreshold = s.workspace.settings?.dailyHoursThreshold ?? 8;
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [userId, setUserId] = useState(s.ctx.userId);
   const [logOpen, setLogOpen] = useState(false);
@@ -113,7 +114,7 @@ export default function TimesheetsPage() {
             <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold">
               <tr>
                 <td className="px-4 py-2">Daily total</td>
-                {dayTotals.map((h, i) => <td key={i} className={`px-2 py-2 text-center ${h > 8 ? 'text-amber-600' : ''}`}>{h || '–'}</td>)}
+                {dayTotals.map((h, i) => <td key={i} className={`px-2 py-2 text-center ${h > dailyThreshold ? 'text-amber-600' : ''}`}>{h || '–'}</td>)}
                 <td className="px-2 py-2 text-center">{total}</td>
               </tr>
             </tfoot>

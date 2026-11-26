@@ -21,12 +21,10 @@ export default function CreateTaskModal() {
   useEffect(() => {
     if (!defaults) return;
     setErr('');
-    setAnother(false);
     setF({
       ...empty,
       projectId: defaults.projectId ?? projects[0]?.id ?? '',
       status: defaults.status ?? 'todo',
-      assigneeId: defaults.assigneeId ?? '',
       sprintId: defaults.sprintId ?? '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -39,10 +37,9 @@ export default function CreateTaskModal() {
     e.preventDefault();
     if (!f.projectId) return setErr('Choose a project');
     if (!f.title.trim()) return setErr('Title is required');
-    if (!f.dueDate) return setErr('A deadline is required');
     let created: { id: string; key: string } | null = null;
-    const ok = await run(() => {
-      created = tasksApi.create({
+    const ok = await run(async () => {
+      created = await tasksApi.create({
         projectId: f.projectId,
         title: f.title,
         description: f.description,
@@ -54,7 +51,6 @@ export default function CreateTaskModal() {
         estimateHours: Number(f.estimateHours || 0),
         labels: f.labels.split(',').map((l) => l.trim()).filter(Boolean),
         parentTaskId: defaults?.parentTaskId ?? null,
-        followUpTo: defaults?.followUpTo,
       });
     });
     if (!ok || !created) return;
@@ -71,13 +67,13 @@ export default function CreateTaskModal() {
     <Modal
       open
       onClose={close}
-      title={defaults.followUpTo ? 'Assign follow-up task' : 'Create task'}
+      title="Create task"
       size="lg"
       footer={
         <>
-          {!defaults.followUpTo && <label className="mr-auto flex items-center gap-2 text-sm text-slate-600">
+          <label className="mr-auto flex items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" checked={another} onChange={(e) => setAnother(e.target.checked)} className="rounded border-slate-300" /> Create another
-          </label>}
+          </label>
           <Button variant="secondary" onClick={close}>Cancel</Button>
           <Button type="submit" form="create-task-form">Create</Button>
         </>
@@ -90,13 +86,13 @@ export default function CreateTaskModal() {
           {err && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Project">
-              <Select disabled={!!defaults.followUpTo} value={f.projectId} onChange={(e) => setF((p) => ({ ...p, projectId: e.target.value, sprintId: '' }))}>
+              <Select value={f.projectId} onChange={(e) => setF((p) => ({ ...p, projectId: e.target.value, sprintId: '' }))}>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.key})</option>)}
               </Select>
             </Field>
             <Field label="Status">
               <Select value={f.status} onChange={set('status')}>
-                {STATUSES.filter((x) => !defaults.followUpTo || x.id !== 'done').map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                {STATUSES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
               </Select>
             </Field>
           </div>
@@ -108,7 +104,7 @@ export default function CreateTaskModal() {
           </Field>
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Assignee">
-              <Select disabled={!!defaults.followUpTo} value={f.assigneeId} onChange={set('assigneeId')}>
+              <Select value={f.assigneeId} onChange={set('assigneeId')}>
                 <option value="">Unassigned</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </Select>
@@ -124,8 +120,8 @@ export default function CreateTaskModal() {
                 {sprints.map((x) => <option key={x.id} value={x.id}>{x.name}{x.status === 'active' ? ' (active)' : ''}</option>)}
               </Select>
             </Field>
-            <Field label="Deadline" hint="Work is due by the end of this date.">
-              <Input type="date" required value={f.dueDate} onChange={set('dueDate')} />
+            <Field label="Due date">
+              <Input type="date" value={f.dueDate} onChange={set('dueDate')} />
             </Field>
             <Field label="Estimate (hours)">
               <Input type="number" min="0" step="0.5" value={f.estimateHours} onChange={set('estimateHours')} placeholder="0" />

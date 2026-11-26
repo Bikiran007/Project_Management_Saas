@@ -3,9 +3,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { ArrowDownUp, CalendarRange, Flag, Play, Plus, Search, Trash2 } from 'lucide-react';
 import { useApp, useLive, useSession, run } from '@/store/app';
-import { dayKey, lookupUser, membersApi, projectsApi, reportsApi, sprintsApi, tasksApi, type TaskFilters } from '@/lib/api';
+import { lookupUser, membersApi, projectsApi, reportsApi, sprintsApi, tasksApi, type TaskFilters } from '@/lib/api';
 import { can } from '@/lib/permissions';
-import { calendarDaysBetween, fmtDate, isOverdue, labelStyle } from '@/lib/format';
+import { fmtDate, isOverdue, labelStyle } from '@/lib/format';
 import { PRIORITIES, STATUSES, type Sprint, type Task } from '@/lib/types';
 import { Avatar, Badge, Button, Card, EmptyState, Field, Input, Modal, PriorityBadge, Select, StatusBadge, Tabs, Textarea } from '@/components/ui';
 import Board from '@/components/Board';
@@ -58,8 +58,7 @@ function BoardView({ projectId, sprints, members }: { projectId: string; sprints
   const effective = scope === 'sprint' && active ? active.id : undefined;
   const tasks = useLive(() => tasksApi.list({ ...f, projectId, sprintId: effective ?? '' }), [JSON.stringify(f), projectId, effective], []);
   const meta = useLive(() => tasksApi.cardMeta(projectId), [projectId], { subtasks: {}, comments: {} });
-  const daysLeft = active?.endDate ? calendarDaysBetween(dayKey(new Date()), dayKey(active.endDate)) : 0;
-  const sprintTiming = daysLeft < 0 ? 'past scheduled end' : daysLeft === 0 ? 'ends today' : `${daysLeft}d left`;
+  const daysLeft = active?.endDate ? Math.ceil((new Date(active.endDate).getTime() - Date.now()) / 864e5) : 0;
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -67,7 +66,7 @@ function BoardView({ projectId, sprints, members }: { projectId: string; sprints
           <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm">
             <CalendarRange className="h-4 w-4 text-blue-600" />
             <b className="text-blue-900">{active.name}</b>
-            <span className="text-blue-700">{fmtDate(active.startDate)} – {fmtDate(active.endDate)} · {sprintTiming}</span>
+            <span className="text-blue-700">{fmtDate(active.startDate)} – {fmtDate(active.endDate)} · {daysLeft > 0 ? `${daysLeft} days left` : 'ends today'}</span>
             {active.goal && <span className="hidden text-blue-600 md:inline">· {active.goal}</span>}
           </div>
         ) : (
@@ -312,10 +311,7 @@ function BacklogView({ projectId }: { projectId: string }) {
 
 function ReportsView({ projectId, sprints }: { projectId: string; sprints: Sprint[] }) {
   const started = sprints.filter((s) => s.startDate).reverse();
-  const [selectedSprint, setSid] = useState('');
-  const sid = started.some((s) => s.id === selectedSprint)
-    ? selectedSprint
-    : started.find((s) => s.status === 'active')?.id ?? started[0]?.id ?? '';
+  const [sid, setSid] = useState(started.find((s) => s.status === 'active')?.id ?? started[0]?.id ?? '');
   const burndown = useLive(() => (sid ? reportsApi.burndown(sid).points : []), [sid], []);
   const velocity = useLive(() => reportsApi.velocity(projectId), [projectId], []);
   const status = useLive(() => reportsApi.statusBreakdown(projectId), [projectId], []);

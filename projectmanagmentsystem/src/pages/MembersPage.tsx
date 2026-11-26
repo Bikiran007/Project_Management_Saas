@@ -13,6 +13,7 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('member');
   const [link, setLink] = useState('');
+  const [mailStatus, setMailStatus] = useState<{ sent: boolean; error?: string; previewUrl?: string } | null>(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const toast = useApp((x) => x.toast);
@@ -22,6 +23,7 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     setEmail('');
     setRole('member');
     setLink('');
+    setMailStatus(null);
     setErr('');
   };
 
@@ -33,7 +35,14 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     try {
       const r = await createInvite(email, role);
       setLink(r.link);
-      toast(`Invitation created for ${email}`, 'success');
+      setMailStatus({ sent: !!r.emailSent, error: r.emailError, previewUrl: r.previewUrl });
+      if (r.emailSent) {
+        toast(`Invitation email sent to ${email}`, 'success');
+      } else if (r.emailError) {
+        toast(`Invite created, but email could not be sent: ${r.emailError}`, 'error');
+      } else {
+        toast(`Invitation created for ${email}`, 'success');
+      }
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : 'Could not invite');
     } finally {
@@ -45,10 +54,27 @@ function InviteModal({ open, onClose }: { open: boolean; onClose: () => void }) 
     <Modal open={open} onClose={() => { reset(); onClose(); }} title="Invite a team member">
       {link ? (
         <div className="space-y-4">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-            <p className="flex items-center gap-1.5 font-medium"><Mail className="h-4 w-4" /> Invitation email queued for {email}</p>
-            <p className="mt-1 text-emerald-700">This is a frontend-only build, so no email is actually sent. Share this link with the employee instead. It works once and expires in 7 days.</p>
-          </div>
+          {mailStatus?.sent ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <p className="flex items-center gap-1.5 font-medium"><Mail className="h-4 w-4" /> Invitation sent to {email}</p>
+              <p className="mt-1 text-emerald-700">
+                An invitation email has been sent. You can also copy and share this link directly with the employee. It works once and expires in 7 days.
+                {mailStatus.previewUrl && (
+                  <>
+                    {' '}
+                    <a href={mailStatus.previewUrl} target="_blank" rel="noreferrer" className="font-medium underline">Preview email</a>
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p className="flex items-center gap-1.5 font-medium"><Mail className="h-4 w-4" /> Invitation created for {email}</p>
+              <p className="mt-1 text-amber-700">
+                Email delivery failed{mailStatus?.error ? `: ${mailStatus.error}` : ''}. Share this link directly with the employee instead. It works once and expires in 7 days.
+              </p>
+            </div>
+          )}
           <div className="flex gap-2">
             <Input readOnly value={link} onFocus={(e) => e.target.select()} data-testid="invite-link" />
             <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => { navigator.clipboard?.writeText(link); toast('Invite link copied', 'info'); }}>Copy</Button>
@@ -92,6 +118,7 @@ export default function MembersPage() {
   const s = useSession();
   const confirm = useApp((x) => x.confirm);
   const online = useApp((x) => x.online);
+  const toast = useApp((x) => x.toast);
   const members = useLive(() => membersApi.list(), [s.ctx.workspaceId], []);
   const invites = useLive(() => (can(s.ctx.role, 'member.invite') ? membersApi.invites() : []), [s.ctx.workspaceId, s.ctx.role], []);
   const [open, setOpen] = useState(false);
@@ -169,7 +196,29 @@ export default function MembersPage() {
                     <Badge className={tone}>{state}</Badge>
                     <span className="text-xs text-slate-400">sent {timeAgo(i.createdAt)}{state === 'Pending' && ` · expires ${fmtDate(i.expiresAt)}`}</span>
                     {state === 'Pending' ? (
-                      <Button size="sm" variant="ghost" onClick={() => run(() => membersApi.revokeInvite(i.id), 'Invite revoked')}>Revoke</Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            run(async () => {
+                              const res = await membersApi.resendInvite(i.id);
+                              if (res.emailSent) {
+                                toast(`Invite resent to ${i.email}`, 'success');
+                              } else if (res.emailError) {
+                                toast(`Invite resent, but email failed: ${res.emailError}`, 'error');
+                              } else {
+                                toast(`Invite resent to ${i.email}`, 'success');
+                              }
+                            })
+                          }
+                        >
+                          Resend
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => run(() => membersApi.revokeInvite(i.id), 'Invite revoked')}>
+                          Revoke
+                        </Button>
+                      </div>
                     ) : <span className="w-16" />}
                   </div>
                 );
