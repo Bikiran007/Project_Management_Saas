@@ -2,7 +2,17 @@
 
 A full-featured Jira/Asana-style web application designed for organizations to create isolated multi-tenant workspaces, invite members with specific roles, and efficiently manage projects, boards, sprints, and tasks. 
 
-**🔗 Live Demo:** 
+**🔗 Live Demo:** [TaskForge on Netlify](https://projectmanagment4u.netlify.app/)
+
+## Run locally
+
+```bash
+cd projectmanagmentsystem
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite. For demo and testing instructions, see the [app README](projectmanagmentsystem/README.md).
 
 ## 📋 Overview
 This project delivers a complete, responsive frontend interface that demonstrates a workspace-first design. Every screen and data element is scoped to a single organization to solve common team challenges like scattered work, weak data separation, and unclear access control. 
