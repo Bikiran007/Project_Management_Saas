@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useLive, useSession } from '@/store/app';
 import { dayKey, lookupUser, projectsApi, reportsApi } from '@/lib/api';
-import { fmtDate } from '@/lib/format';
+import { calendarDaysBetween, fmtDate } from '@/lib/format';
 import { Avatar, Card, EmptyState, PageHeader, PriorityBadge, RoleBadge, Select, StatusBadge } from '@/components/ui';
 import { StatusPie, VelocityChart, WorkloadChart } from '@/components/charts';
 import { useOpenTask } from '@/components/hooks';
@@ -89,7 +89,7 @@ export default function ReportsPage() {
               <table className="w-full min-w-[640px] text-sm">
                 <tbody className="divide-y divide-slate-100">
                   {overdue.map((t) => {
-                    const days = Math.round((Date.now() - new Date(t.dueDate + 'T00:00').getTime()) / 864e5);
+                    const days = t.dueDate ? calendarDaysBetween(t.dueDate, r.to) : 0;
                     return (
                       <tr key={t.id} className="cursor-pointer hover:bg-slate-50" onClick={() => openTask(t.id)}>
                         <td className="px-4 py-2.5 font-medium text-slate-500">{t.key}</td>
