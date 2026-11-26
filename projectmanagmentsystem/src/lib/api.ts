@@ -320,7 +320,8 @@ export const sprintsApi = {
     if (days < 1 || days > 60) throw badRequest('Sprint length must be between 1 and 60 days');
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const end = new Date(start.getTime() + days * 86400000);
+    const end = new Date(start);
+    end.setDate(start.getDate() + days);
     repo.update('sprints', id, { status: 'active', startDate: start.toISOString(), endDate: end.toISOString() });
     log(repo, ctx, 'sprint', id, 'started sprint', { sprint: s.name });
     emit(ctx, { type: 'db:changed', message: `${s.name} started` });
@@ -378,6 +379,7 @@ export interface TaskInput {
   estimateHours?: number;
   sprintId?: string | null;
   parentTaskId?: string | null;
+  followUpTo?: string;
 }
 
 const FIELD_LABELS: Partial<Record<keyof Task, string>> = {
@@ -399,6 +401,10 @@ function validateTaskPatch(repo: TenantRepo, projectId: string, p: Partial<TaskI
   if (p.title && p.title.length > 200) throw badRequest('Title must be 200 characters or fewer');
   if (p.estimateHours !== undefined && (isNaN(p.estimateHours) || p.estimateHours < 0 || p.estimateHours > 999))
     throw badRequest('Estimate must be between 0 and 999 hours');
+  if (p.dueDate !== undefined && (!p.dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(p.dueDate) ||
+    !Number.isFinite(Date.parse(p.dueDate)) || new Date(p.dueDate).toISOString().slice(0, 10) !== p.dueDate)) {
+    throw badRequest('A valid deadline is required');
+  }
   if (p.assigneeId) memberUser(repo, p.assigneeId);
   if (p.sprintId) {
     const s = repo.get('sprints', p.sprintId);
@@ -408,7 +414,51 @@ function validateTaskPatch(repo: TenantRepo, projectId: string, p: Partial<TaskI
   if (p.status && !STATUSES.some((s) => s.id === p.status)) throw badRequest('Invalid status');
 }
 
+function recordDeadlineMiss(repo: TenantRepo, task: Task, now: string): boolean {
+  if (task.deadlinePenalty || !task.dueDate) return false;
+  const cutoff = task.status === 'done' ? task.completedAt : now;
+  if (!cutoff || dayKey(cutoff) <= task.dueDate) return false;
+  task.deadlinePenalty = { dueDate: task.dueDate, assigneeId: task.assigneeId };
+  if (task.assigneeId) {
+    notify(repo, task.assigneeId, 'deadline', `${task.key} missed its deadline. One penalty point recorded.`, task.id);
+  }
+  return true;
+}
+
+export function finishedEarly(task: Task): boolean {
+  if (task.status !== 'done' || task.deadlinePenalty) return false;
+  if (task.deadlineOutcome) return task.deadlineOutcome === 'early';
+  return !!(task.completedAt && task.dueDate && dayKey(task.completedAt) < task.dueDate);
+}
+
+function recordCompletion(repo: TenantRepo, task: Task, now: string) {
+  recordDeadlineMiss(repo, task, now);
+  if (task.status !== 'done' || !task.dueDate) return;
+  const day = dayKey(now);
+  task.deadlineOutcome = day < task.dueDate ? 'early' : day === task.dueDate ? 'on-time' : 'late';
+  if (!finishedEarly(task) || !task.assigneeId) return;
+  for (const member of repo.list('memberships', (m) => m.status === 'active' && isAdminRole(m.role))) {
+    notify(repo, member.userId, 'deadline', `${task.key} finished early. Open the task to assign follow-up work.`, task.id);
+  }
+}
+
 export const tasksApi = {
+  checkDeadlines() {
+    const { ctx, repo } = scope();
+    const now = nowIso();
+    let changed = false;
+    for (const task of repo.list('tasks')) {
+      if (recordDeadlineMiss(repo, task, now)) changed = true;
+    }
+    if (changed) emit(ctx, { type: 'db:changed' });
+    return changed;
+  },
+
+  followUp(id: string) {
+    const { repo } = scope();
+    return repo.find('tasks', (t) => t.followUpTo === id);
+  },
+
   list(f: TaskFilters = {}): Task[] {
     const { repo } = scope();
     const q = f.search?.trim().toLowerCase();
@@ -469,6 +519,16 @@ export const tasksApi = {
       if (parent.projectId !== project.id) throw badRequest('Parent task is in another project');
       if (parent.parentTaskId) throw badRequest('Subtasks cannot have their own subtasks');
     }
+    if (!input.dueDate) throw badRequest('A deadline is required');
+    if (input.followUpTo) {
+      if (!isAdminRole(ctx.role)) throw forbidden('Only an admin can assign follow-up work');
+      const original = repo.get('tasks', input.followUpTo);
+      if (original.projectId !== project.id || !finishedEarly(original) || !original.assigneeId ||
+        input.assigneeId !== original.assigneeId || input.parentTaskId || input.status === 'done') {
+        throw badRequest('Assign open follow-up work to the original assignee in the same project');
+      }
+      if (repo.find('tasks', (t) => t.followUpTo === original.id)) throw conflict('A follow-up already exists');
+    }
     const status = input.status ?? 'todo';
     const last = repo
       .list('tasks', (t) => t.projectId === project.id && t.status === status)
@@ -488,13 +548,15 @@ export const tasksApi = {
       labels: (input.labels ?? []).map((l) => l.trim().toLowerCase()).filter(Boolean),
       order: last + 1000,
       parentTaskId: parent?.id ?? null,
-      dueDate: input.dueDate || null,
+      dueDate: input.dueDate,
+      followUpTo: input.followUpTo,
       estimateHours: Number(input.estimateHours ?? 0),
       completedAt: status === 'done' ? now : null,
       attachments: [],
       createdAt: now,
       updatedAt: now,
     });
+    recordCompletion(repo, task, now);
     log(repo, ctx, 'task', task.id, parent ? 'created subtask' : 'created task', { key: task.key, title: task.title });
     if (task.assigneeId && task.assigneeId !== ctx.userId)
       notify(repo, task.assigneeId, 'assigned', `${userName(ctx.userId)} assigned you ${task.key}: ${task.title}`, task.id);
@@ -502,7 +564,7 @@ export const tasksApi = {
     return task;
   },
 
-  update(id: string, patch: Partial<Omit<TaskInput, 'projectId' | 'parentTaskId'>>): Task {
+  update(id: string, patch: Partial<Omit<TaskInput, 'projectId' | 'parentTaskId' | 'followUpTo'>>): Task {
     const { ctx, repo } = scope();
     assertCan(ctx.role, 'task.update');
     const task = repo.get('tasks', id);
@@ -520,8 +582,16 @@ export const tasksApi = {
     if (clean.title) clean.title = clean.title.trim();
     if (clean.labels) clean.labels = clean.labels.map((l) => l.trim().toLowerCase()).filter(Boolean);
     if (clean.estimateHours !== undefined) clean.estimateHours = Number(clean.estimateHours);
-    if (clean.status && clean.status !== before.status) clean.completedAt = clean.status === 'done' ? nowIso() : null;
-    repo.update('tasks', id, { ...clean, updatedAt: nowIso() });
+    const now = nowIso();
+    recordDeadlineMiss(repo, task, now);
+    const statusChanged = clean.status && clean.status !== before.status;
+    if (statusChanged) {
+      clean.completedAt = clean.status === 'done' ? now : null;
+      clean.deadlineOutcome = undefined;
+    }
+    repo.update('tasks', id, { ...clean, updatedAt: now });
+    if (statusChanged) recordCompletion(repo, task, now);
+    else recordDeadlineMiss(repo, task, now);
 
     changes.forEach((k) => {
       const label = FIELD_LABELS[k as keyof Task] ?? k;
@@ -569,11 +639,16 @@ export const tasksApi = {
     let order = orderBetween(before?.order, after?.order);
     if (before && after && before.order >= after.order) order = before.order + 0.5; // neighbours changed concurrently
     const fromStatus = task.status;
+    validateTaskPatch(repo, task.projectId, { status });
+    const now = nowIso();
+    recordDeadlineMiss(repo, task, now);
     task.order = order;
-    task.updatedAt = nowIso();
+    task.updatedAt = now;
     if (fromStatus !== status) {
       task.status = status;
-      task.completedAt = status === 'done' ? nowIso() : null;
+      task.completedAt = status === 'done' ? now : null;
+      task.deadlineOutcome = undefined;
+      recordCompletion(repo, task, now);
       log(repo, ctx, 'task', id, 'moved task', { key: task.key, from: statusLabel(fromStatus), to: statusLabel(status) });
       if (task.reporterId !== ctx.userId && status === 'done')
         notify(repo, task.reporterId, 'comment', `${userName(ctx.userId)} completed ${task.key}: ${task.title}`, id);
@@ -787,20 +862,25 @@ export const reportsApi = {
     const tasks = repo.list('tasks', (t) => t.sprintId === s.id && !t.parentTaskId);
     const total = s.status === 'completed' && s.committedHours != null ? s.committedHours : tasks.reduce((a, t) => a + t.estimateHours, 0);
     const start = new Date(s.startDate);
+    start.setHours(0, 0, 0, 0);
     const end = new Date(s.endDate);
+    end.setHours(0, 0, 0, 0);
     const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000));
-    const today = new Date();
+    const cutoff = s.completedAt ? new Date(s.completedAt) : new Date();
     const points = [];
     for (let i = 0; i <= days; i++) {
-      const d = new Date(start.getTime() + i * 86400000);
-      const endOfDay = new Date(d.getTime() + 86400000 - 1);
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const nextDay = new Date(d);
+      nextDay.setDate(d.getDate() + 1);
+      const endOfDay = new Date(Math.min(nextDay.getTime() - 1, cutoff.getTime()));
       const doneBy = tasks
         .filter((t) => t.completedAt && new Date(t.completedAt) <= endOfDay)
         .reduce((a, t) => a + t.estimateHours, 0);
       points.push({
         day: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         ideal: Math.round((total - (total * i) / days) * 10) / 10,
-        remaining: d <= today ? Math.max(0, Math.round((total - doneBy) * 10) / 10) : null,
+        remaining: d <= cutoff ? Math.max(0, Math.round((total - doneBy) * 10) / 10) : null,
       });
     }
     return { sprint: s, points };
@@ -823,11 +903,14 @@ export const reportsApi = {
   },
 
   /** Open work and logged hours per member — the workload distribution report. */
-  workload(range: { from: string; to: string }) {
+  workload(range: { from: string; to: string }, projectId?: string) {
     const { repo } = scope();
     const members = membersApi.list();
-    const open = repo.list('tasks', (t) => t.status !== 'done');
-    const logs = repo.list('timelogs', (l) => l.date >= range.from && l.date <= range.to);
+    const tasks = repo.list('tasks', (t) => !projectId || t.projectId === projectId);
+    const taskIds = new Set(tasks.map((t) => t.id));
+    const open = tasks.filter((t) => t.status !== 'done');
+    const logs = repo.list('timelogs', (l) => taskIds.has(l.taskId) && l.date >= range.from && l.date <= range.to);
+    const today = dayKey(new Date());
     const rows = members.map(({ user, membership }) => {
       const mine = open.filter((t) => t.assigneeId === user.id);
       return {
@@ -837,7 +920,8 @@ export const reportsApi = {
         color: user.avatarColor,
         openTasks: mine.length,
         openHours: mine.reduce((a, t) => a + t.estimateHours, 0),
-        overdue: mine.filter((t) => t.dueDate && t.dueDate < dayKey(new Date())).length,
+        overdue: mine.filter((t) => t.dueDate && t.dueDate < today).length,
+        penaltyPoints: tasks.filter((t) => t.deadlinePenalty?.assigneeId === user.id).length,
         logged: Math.round(logs.filter((l) => l.userId === user.id).reduce((a, l) => a + l.hours, 0) * 100) / 100,
       };
     });

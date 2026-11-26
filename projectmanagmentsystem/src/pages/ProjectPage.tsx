@@ -311,7 +311,10 @@ function BacklogView({ projectId }: { projectId: string }) {
 
 function ReportsView({ projectId, sprints }: { projectId: string; sprints: Sprint[] }) {
   const started = sprints.filter((s) => s.startDate).reverse();
-  const [sid, setSid] = useState(started.find((s) => s.status === 'active')?.id ?? started[0]?.id ?? '');
+  const [selectedSprint, setSid] = useState('');
+  const sid = started.some((s) => s.id === selectedSprint)
+    ? selectedSprint
+    : started.find((s) => s.status === 'active')?.id ?? started[0]?.id ?? '';
   const burndown = useLive(() => (sid ? reportsApi.burndown(sid).points : []), [sid], []);
   const velocity = useLive(() => reportsApi.velocity(projectId), [projectId], []);
   const status = useLive(() => reportsApi.statusBreakdown(projectId), [projectId], []);

@@ -4,7 +4,8 @@ import { Eye, EyeOff, LogIn, ShieldCheck, Users } from 'lucide-react';
 import AuthShell from '@/components/AuthShell';
 import { Button, Field, Input, RoleBadge } from '@/components/ui';
 import { login, EMAIL_RE } from '@/lib/auth';
-import { DEMO_ACCOUNTS } from '@/lib/seed';
+import { getDb } from '@/lib/db';
+import { DEMO_ACCOUNTS, ensureSeeded } from '@/lib/seed';
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -16,6 +17,9 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const users = getDb().users;
+  const demoAccounts = users.length ? DEMO_ACCOUNTS.filter((account) => users.some((user) => user.email === account.email)) : DEMO_ACCOUNTS;
 
   const emailErr = touched && !EMAIL_RE.test(email.trim()) ? 'Enter a valid email address' : '';
   const pwErr = touched && !password ? 'Password is required' : '';
@@ -84,17 +88,26 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <details className="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm" open>
+      {demoAccounts.length > 0 && <details className="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm">
         <summary className="cursor-pointer font-medium text-slate-700">Demo accounts (click one to fill)</summary>
         <div className="mt-2 divide-y divide-slate-200">
-          {DEMO_ACCOUNTS.map((a) => (
+          {demoAccounts.map((a) => (
             <button
               key={a.email}
               type="button"
-              onClick={() => {
-                setEmail(a.email);
-                setPassword(a.password);
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true);
                 setError('');
+                try {
+                  await ensureSeeded();
+                  setEmail(a.email);
+                  setPassword(a.password);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Could not load demo accounts');
+                } finally {
+                  setLoading(false);
+                }
               }}
               className="flex w-full items-center justify-between gap-2 py-1.5 text-left hover:text-brand-700"
             >
@@ -106,7 +119,7 @@ export default function LoginPage() {
             </button>
           ))}
         </div>
-      </details>
+      </details>}
     </AuthShell>
   );
 }

@@ -15,6 +15,8 @@ export interface CreateTaskDefaults {
   status?: import('@/lib/types').TaskStatus;
   sprintId?: string | null;
   parentTaskId?: string | null;
+  assigneeId?: string;
+  followUpTo?: string;
 }
 
 interface ConfirmState {

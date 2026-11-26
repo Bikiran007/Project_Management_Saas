@@ -18,9 +18,9 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useApp, useLive, useSession } from '@/store/app';
+import { run, useApp, useLive, useSession } from '@/store/app';
 import { logout, switchWorkspace } from '@/lib/auth';
-import { lookupUser, notificationsApi, projectsApi } from '@/lib/api';
+import { dayKey, lookupUser, notificationsApi, projectsApi, tasksApi } from '@/lib/api';
 import { can } from '@/lib/permissions';
 import { timeAgo } from '@/lib/format';
 import { Avatar, Button, Dropdown, MenuItem, RoleBadge } from './ui';
@@ -213,6 +213,25 @@ export default function AppLayout() {
   const openCreate = useApp((x) => x.openCreateTask);
   const toast = useApp((x) => x.toast);
   const taskId = sp.get('task');
+  const followUpSource = useApp((x) => x.createTask?.followUpTo);
+  useEffect(() => {
+    let today = dayKey(new Date());
+    const refresh = () => {
+      void run(() => tasksApi.checkDeadlines());
+      const next = dayKey(new Date());
+      if (next !== today) {
+        today = next;
+        useApp.getState().bump();
+      }
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [s.ctx.workspaceId]);
 
   const greeted = useRef(false);
   useEffect(() => {
@@ -304,7 +323,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
-      {taskId && <TaskModal taskId={taskId} onClose={closeTask} />}
+      {taskId && taskId !== followUpSource && <TaskModal taskId={taskId} onClose={closeTask} />}
       <CreateTaskModal />
     </div>
   );

@@ -195,3 +195,71 @@ describe('tasks, sprints and reports', () => {
     expect(() => timeApi.add({ taskId: t.id, hours: 2, date: '2999-01-01', note: '' })).toThrow(/future/);
   });
 });
+
+describe('task deadlines', () => {
+  it('requires a real calendar deadline for tasks and subtasks', async () => {
+    await login('admin@acme.com', 'Admin@123');
+    const parent = tasksApi.list()[0];
+    const input = { projectId: parent.projectId, title: 'Deadline validation' };
+    expect(() => tasksApi.create(input)).toThrow(/deadline/i);
+    expect(() => tasksApi.create({ ...input, dueDate: '2099-02-30' })).toThrow(/deadline/i);
+    expect(() => tasksApi.create({ ...input, parentTaskId: parent.id })).toThrow(/deadline/i);
+    expect(tasksApi.create({ ...input, dueDate: '2099-02-28' }).dueDate).toBe('2099-02-28');
+  });
+
+  it('treats completion on the deadline as on time', async () => {
+    await login('rahul@acme.com', 'Employee@123');
+    const task = tasksApi.create({
+      projectId: projectsApi.list()[0].id,
+      assigneeId: resolveCtx()!.userId,
+      title: 'Due today',
+      dueDate: dayKey(new Date()),
+    });
+    tasksApi.move(task.id, 'done');
+    tasksApi.checkDeadlines();
+    expect(task.deadlineOutcome).toBe('on-time');
+    expect(task.deadlinePenalty).toBeUndefined();
+
+    logout();
+    await login('admin@acme.com', 'Admin@123');
+    expect(notificationsApi.list().some((n) => n.taskId === task.id && n.type === 'deadline')).toBe(false);
+  });
+
+  it('records one penalty against the original assignee and reflects it in project reports', async () => {
+    await login('admin@acme.com', 'Admin@123');
+    const [project, other] = projectsApi.list();
+    const assignee = membersApi.users().find((u) => u.email === 'rahul@acme.com')!;
+    tasksApi.checkDeadlines();
+    const today = dayKey(new Date());
+    const range = { from: today, to: today };
+    const points = (projectId: string) => reportsApi.workload(range, projectId).rows.find((r) => r.userId === assignee.id)!.penaltyPoints;
+    const previous = points(project.id);
+    const otherPrevious = points(other.id);
+    const task = tasksApi.create({
+      projectId: project.id, title: 'Late task', assigneeId: assignee.id, dueDate: '2000-01-01',
+    });
+    tasksApi.checkDeadlines();
+    tasksApi.move(task.id, 'done');
+    tasksApi.update(task.id, { dueDate: '2099-01-01', assigneeId: null });
+    expect(tasksApi.checkDeadlines()).toBe(false);
+    expect(task.deadlinePenalty).toEqual({ dueDate: '2000-01-01', assigneeId: assignee.id });
+    expect(points(project.id)).toBe(previous + 1);
+    expect(points(other.id)).toBe(otherPrevious);
+  });
+
+  it('notifies owners about early completion and accepts one admin-assigned follow-up', async () => {
+    await login('rahul@acme.com', 'Employee@123');
+    const projectId = projectsApi.list()[0].id;
+    const assigneeId = resolveCtx()!.userId;
+    const task = tasksApi.create({ projectId, assigneeId, title: 'Finish early', dueDate: '2099-01-01' });
+    tasksApi.move(task.id, 'done');
+    const followUp = { projectId, assigneeId, title: 'Follow-up work', dueDate: '2099-01-02', followUpTo: task.id };
+    expect(() => tasksApi.create(followUp)).toThrow(/only an admin/i);
+    logout();
+    await login('admin@acme.com', 'Admin@123');
+    expect(notificationsApi.list().some((n) => n.taskId === task.id && n.type === 'deadline')).toBe(true);
+    const next = tasksApi.create(followUp);
+    expect(tasksApi.followUp(task.id)?.id).toBe(next.id);
+    expect(() => tasksApi.create(followUp)).toThrow(/already exists/i);
+  });
+});
