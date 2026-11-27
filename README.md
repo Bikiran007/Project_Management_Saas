@@ -43,4 +43,4 @@ The application enforces a strict data hierarchy (Workspace > Project > Sprint >
 * **Commercial Scaling:** Stripe subscription billing, public APIs, webhooks, and Docker CI/CD deployment.
 
 ---
-*Developed by Group G-19 for Advanced Web Design Frameworks & Development at Chitkara University.*
+*Developed by Group G-19(PID-13) for Advanced Web Design Frameworks & Development at Chitkara University.*
